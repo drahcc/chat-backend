@@ -4,30 +4,55 @@ const User = use('App/Models/User')
 
 class AuthController {
 
-  async login({ request, auth, response }) {
+  // Регистрация
+  async register({ request, auth, response }) {
     try {
-      const { email, password } = request.only(['email', 'password'])
+      const data = request.only(['email', 'password', 'username'])
 
-      // Проверяваме дали auth.attempt успява
-      const token = await auth.attempt(email, password)
+      if (!data.username) {
+        return response.status(400).json({
+          message: "Username is required"
+        })
+      }
 
-      // Намираме потребителя
-      const user = await User.findBy('email', email)
+      const user = await User.create(data)
 
-      return response.json({
-        message: "Login successful",
-        token: token,
-        user: user
+      const token = await auth.generate(user)
+
+      return response.status(201).json({
+        message: 'Registration successful',
+        token,
+        user
       })
-
     } catch (error) {
-      console.log("LOGIN ERROR:", error)
-      return response.status(401).json({
-        message: "Invalid email or password"
+      console.error('REGISTER ERROR:', error)
+      return response.status(400).json({
+        message: 'Registration failed',
+        error: error.message
       })
     }
   }
 
+  // Логин
+  async login({ request, auth, response }) {
+    try {
+      const { email, password } = request.only(['email', 'password'])
+
+      const token = await auth.attempt(email, password)
+      const user = await User.findBy('email', email)
+
+      return response.json({
+        message: 'Login successful',
+        token,
+        user
+      })
+    } catch (error) {
+      console.error('LOGIN ERROR:', error)
+      return response.status(401).json({
+        message: 'Invalid email or password'
+      })
+    }
+  }
 }
 
 module.exports = AuthController
