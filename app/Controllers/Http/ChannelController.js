@@ -2,20 +2,29 @@
 
 const Channel = use('App/Models/Channel')
 const ChannelMember = use('App/Models/ChannelMember')
+const ChannelBan = use('App/Models/ChannelBan')
 
 class ChannelController {
+
+  /**
+   * GET /channels
+   * List all channels with members
+   */
   async index() {
-    return await Channel
+    return Channel
       .query()
       .with('members.user')
       .fetch()
   }
 
+  /**
+   * POST /channels
+   * Create channel
+   */
   async create({ request, auth }) {
     const user = await auth.getUser()
     const { name, description, type } = request.all()
 
-    // Prevent duplicate channel names
     const exists = await Channel.findBy('name', name)
     if (exists) {
       return { error: 'Channel name already exists' }
@@ -25,10 +34,9 @@ class ChannelController {
       name,
       description: description || '',
       type: type || 'public',
-      admin: user.id,
+      owner_id: user.id,
     })
 
-    // Add creator as admin member
     await ChannelMember.create({
       channel_id: channel.id,
       user_id: user.id,
@@ -38,32 +46,89 @@ class ChannelController {
     return channel
   }
 
+  /**
+   * GET /channels/:id
+   */
   async show({ params }) {
-    const channel = await Channel
+    return Channel
       .query()
       .where('id', params.id)
       .with('members.user')
       .first()
-
-    return channel
   }
 
-  async delete({ params, auth }) {
-    const channel = await Channel.findOrFail(params.id)
+  /**
+   * POST /channels/:id/ban
+   */
+  async banUser({ params, request, auth }) {
     const user = await auth.getUser()
+    const channel = await Channel.findOrFail(params.id)
 
-    if (channel.admin !== user.id) {
-      return { error: 'Only the channel admin can delete the channel' }
+    if (channel.owner_id !== user.id) {
+      return { error: 'Only channel owner can ban users' }
     }
+
+    const { user_id } = request.only(['user_id'])
+
+    await ChannelBan.create({
+      channel_id: channel.id,
+      user_id,
+      reason: request.input('reason', 'No reason provided')
+    })
 
     await ChannelMember
       .query()
-      .where('channel_id', params.id)
+      .where('channel_id', channel.id)
+      .where('user_id', user_id)
       .delete()
 
-    await channel.delete()
+    return { success: true, message: 'User banned successfully' }
+  }
 
-    return { success: true, message: 'Channel deleted' }
+  /**
+   * POST /channels/:id/unban
+   */
+  async unbanUser({ params, request, auth }) {
+    const user = await auth.getUser()
+    const channel = await Channel.findOrFail(params.id)
+
+    if (channel.owner_id !== user.id) {
+      return { error: 'Only channel owner can unban users' }
+    }
+
+    const { user_id } = request.only(['user_id'])
+
+    const ban = await ChannelBan
+      .query()
+      .where('channel_id', channel.id)
+      .where('user_id', user_id)
+      .first()
+
+    if (!ban) {
+      return { error: 'User is not banned' }
+    }
+
+    await ban.delete()
+
+    return { success: true, message: 'User unbanned successfully' }
+  }
+
+  /**
+   * GET /channels/:id/bans
+   */
+  async banList({ params, auth }) {
+    const user = await auth.getUser()
+    const channel = await Channel.findOrFail(params.id)
+
+    if (channel.owner_id !== user.id) {
+      return { error: 'Only owner can see ban list' }
+    }
+
+    return ChannelBan
+      .query()
+      .where('channel_id', channel.id)
+      .with('user')
+      .fetch()
   }
 }
 

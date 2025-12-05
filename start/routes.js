@@ -19,4 +19,19 @@ Route.group(() => {
 
   Route.post('/channels/cleanup', 'ChannelController.cleanup')
 
+  // MESSAGES
+  Route.get('/channels/:channelId/messages', 'MessageController.getMessages')
+  Route.post('/channels/:channelId/messages', 'MessageController.send')
+
+  Route.post('/channels/:id/ban', 'ChannelController.banUser')
+  Route.post('/channels/:id/unban', 'ChannelController.unbanUser')
+
+  // JOIN channel
+  Route.post('/channels/:id/join', 'ChannelMemberController.join').middleware('auth')
+
+  // SEND message
+  //Route.post('/channels/:id/messages', 'MessageController.send').middleware('auth')
+
+
+
 }).middleware(['auth'])

@@ -6,16 +6,22 @@ class ChannelsSchema extends Schema {
   up () {
     this.create('channels', (table) => {
       table.increments()
+
       table.string('name').notNullable().unique()
       table.enu('type', ['public', 'private']).defaultTo('public')
 
-      // Това липсваше!
+      // admin (owner)
       table
-        .integer('owner_id')
+        .integer('admin_id')
         .unsigned()
         .references('id')
         .inTable('users')
         .onDelete('CASCADE')
+
+      table.text('description').nullable()
+
+      // auto cleanup after 30 days inactivity
+      table.timestamp('last_message_at').nullable()
 
       table.timestamps()
     })

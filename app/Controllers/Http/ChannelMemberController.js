@@ -2,15 +2,17 @@
 
 const ChannelMember = use('App/Models/ChannelMember')
 const ChannelBan = use('App/Models/ChannelBan')
-const Message = use('App/Models/Message')
 
-class MessageController {
+class ChannelMemberController {
 
-  async send({ params, request, auth }) {
+  // ===========================
+  // JOIN CHANNEL (with ban check)
+  // ===========================
+  async join({ params, auth }) {
     const user = await auth.getUser()
     const channelId = params.id
 
-    // BLOCK IF BANNED
+    // Check if user is banned
     const isBanned = await ChannelBan
       .query()
       .where('channel_id', channelId)
@@ -24,29 +26,25 @@ class MessageController {
       }
     }
 
-    // BLOCK IF NOT A MEMBER
-    const isMember = await ChannelMember
+    // Check if already a member
+    const exists = await ChannelMember
       .query()
       .where('channel_id', channelId)
       .where('user_id', user.id)
       .first()
 
-    if (!isMember) {
-      return { error: 'You are not a member of this channel' }
+    if (exists) {
+      return { message: 'Already a member' }
     }
 
-    // Create message
-    const msg = await Message.create({
+    // Create membership
+    await ChannelMember.create({
       channel_id: channelId,
-      user_id: user.id,
-      content: request.input('content')
+      user_id: user.id
     })
 
-    return {
-      success: true,
-      message: msg
-    }
+    return { success: true, message: 'Joined channel' }
   }
 }
 
-module.exports = MessageController
+module.exports = ChannelMemberController
