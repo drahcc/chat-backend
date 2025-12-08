@@ -29,8 +29,13 @@
     "@adonisjs/validator": "^5.0.4",
     "@adonisjs/websocket": "^1.0.12",
     "axios": "^1.13.2",
+    "cors": "^2.8.5",
     "date-fns": "^4.1.0",
-    "pg": "^8.16.3"
+    "express": "^5.2.1",
+    "pg": "^8.16.3",
+    "regenerator-runtime": "^0.14.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "autoload": {
     "App": "./app"

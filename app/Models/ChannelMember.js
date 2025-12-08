@@ -1,52 +1,15 @@
 'use strict'
 
-const ChannelMember = use('App/Models/ChannelMember')
-const ChannelBan = use('App/Models/ChannelBan')
-const Message = use('App/Models/Message')
+const Model = use('Model')
 
-class MessageController {
+class ChannelMember extends Model {
+  user () {
+    return this.belongsTo('App/Models/User', 'user_id', 'id')
+  }
 
-  async send({ params, request, auth }) {
-    const user = await auth.getUser()
-    const channelId = params.id
-
-    // BLOCK IF BANNED
-    const isBanned = await ChannelBan
-      .query()
-      .where('channel_id', channelId)
-      .where('user_id', user.id)
-      .first()
-
-    if (isBanned) {
-      return {
-        error: 'You are banned from this channel',
-        reason: isBanned.reason
-      }
-    }
-
-    // BLOCK IF NOT A MEMBER
-    const isMember = await ChannelMember
-      .query()
-      .where('channel_id', channelId)
-      .where('user_id', user.id)
-      .first()
-
-    if (!isMember) {
-      return { error: 'You are not a member of this channel' }
-    }
-
-    // Create message
-    const msg = await Message.create({
-      channel_id: channelId,
-      user_id: user.id,
-      content: request.input('content')
-    })
-
-    return {
-      success: true,
-      message: msg
-    }
+  channel () {
+    return this.belongsTo('App/Models/Channel', 'channel_id', 'id')
   }
 }
 
-module.exports = MessageController
+module.exports = ChannelMember

@@ -37,3 +37,6 @@ const namedMiddleware = {
 Ws
   .registerGlobal(globalMiddleware)
   .registerNamed(namedMiddleware)
+
+// Register WebSocket channels
+Ws.channel('chat:*', 'ChatController')
