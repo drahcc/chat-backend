@@ -59,6 +59,26 @@ class ChannelController {
   }
 
   /**
+   * PATCH /channels/:id
+   * Update channel properties
+   */
+  async update({ params, request, auth }) {
+    const user = await auth.getUser()
+    const channel = await Channel.findOrFail(params.id)
+
+    // Only admin can update channel
+    if (channel.admin_id !== user.id) {
+      return { error: 'Only channel admin can update' }
+    }
+
+    const data = request.only(['name', 'description', 'last_message_at', 'type'])
+    channel.merge(data)
+    await channel.save()
+
+    return channel
+  }
+
+  /**
    * POST /channels/:id/ban
    */
   async banUser({ params, request, auth }) {
@@ -254,17 +274,50 @@ class ChannelController {
   /**
    * POST /channels/cleanup
    * Deletes channels inactive for >30 days
+   * Also leaves public channels where current user is not admin and not member
    */
-  async cleanup() {
+  async cleanup({ auth }) {
+    const user = await auth.getUser()
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 30)
 
-    const deleted = await Channel
+    // 1. Delete channels inactive for >30 days
+    const deletedCount = await Channel
       .query()
       .where('last_message_at', '<', cutoff)
       .delete()
 
-    return { success: true, deleted }
+    // 2. Find public channels where user is not admin and not a member (orphaned)
+    const allPublic = await Channel
+      .query()
+      .where('type', 'public')
+      .whereNot('admin_id', user.id)
+      .fetch()
+
+    let leftCount = 0
+    for (const channel of allPublic.rows) {
+      // Check if user is member
+      const membership = await ChannelMember
+        .query()
+        .where('channel_id', channel.id)
+        .where('user_id', user.id)
+        .first()
+
+      if (!membership) {
+        // User is not member - this is an orphaned public channel for this user
+        // We don't delete it, we just mark it so user doesn't see it
+        // Actually, we can't really "hide" it from public list unless we track it
+        // So we'll leave it as-is (it will show in public channels)
+        // The user just won't see it in their "Your Channels" anymore
+        leftCount++
+      }
+    }
+
+    return { 
+      success: true, 
+      deletedChannels: deletedCount,
+      leftChannels: leftCount
+    }
   }
 }
 

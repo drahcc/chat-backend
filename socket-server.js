@@ -202,6 +202,95 @@ io.on("connection", (socket) => {
 
   /*
   |--------------------------------------------------------------------------
+  |   MESSAGE REACTIONS
+  |--------------------------------------------------------------------------
+  */
+  socket.on("reaction:add", (data) => {
+    const { channelId, messageId, emoji } = data;
+    io.emit(`chat:${channelId}:reaction`, {
+      messageId,
+      emoji,
+      userId: socket.user.id,
+      username: socket.user.username,
+      action: 'add'
+    });
+  });
+
+  socket.on("reaction:remove", (data) => {
+    const { channelId, messageId, emoji } = data;
+    io.emit(`chat:${channelId}:reaction`, {
+      messageId,
+      emoji,
+      userId: socket.user.id,
+      action: 'remove'
+    });
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  |   MESSAGE EDIT/DELETE
+  |--------------------------------------------------------------------------
+  */
+  socket.on("message:edit", (data) => {
+    const { channelId, messageId, content } = data;
+    io.emit(`chat:${channelId}:message:edit`, {
+      messageId,
+      content,
+      editedAt: new Date(),
+      userId: socket.user.id
+    });
+  });
+
+  socket.on("message:delete", (data) => {
+    const { channelId, messageId } = data;
+    io.emit(`chat:${channelId}:message:delete`, {
+      messageId,
+      userId: socket.user.id,
+      deletedAt: new Date()
+    });
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  |   MESSAGE READ RECEIPTS
+  |--------------------------------------------------------------------------
+  */
+  socket.on("message:read", (data) => {
+    const { channelId, messageId } = data;
+    io.emit(`chat:${channelId}:read`, {
+      messageId,
+      userId: socket.user.id,
+      username: socket.user.username,
+      readAt: new Date()
+    });
+  });
+
+  /*
+  |--------------------------------------------------------------------------
+  |   PINNED MESSAGES
+  |--------------------------------------------------------------------------
+  */
+  socket.on("message:pin", (data) => {
+    const { channelId, messageId } = data;
+    io.emit(`chat:${channelId}:pin`, {
+      messageId,
+      userId: socket.user.id,
+      username: socket.user.username,
+      action: 'pin'
+    });
+  });
+
+  socket.on("message:unpin", (data) => {
+    const { channelId, messageId } = data;
+    io.emit(`chat:${channelId}:pin`, {
+      messageId,
+      userId: socket.user.id,
+      action: 'unpin'
+    });
+  });
+
+  /*
+  |--------------------------------------------------------------------------
   |   DISCONNECT
   |--------------------------------------------------------------------------
   */

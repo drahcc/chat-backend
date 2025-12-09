@@ -523,6 +523,100 @@ class MessageController {
     }
   }
 
+  // ============================
+  // EDIT MESSAGE
+  // ============================
+  async edit({ params, request, auth, response }) {
+    try {
+      const user = await auth.getUser()
+      const messageId = params.id
+      const { content } = request.only(['content'])
+
+      if (!content || content.trim() === '') {
+        return response.status(400).json({ error: 'Message content cannot be empty' })
+      }
+
+      const message = await Message.find(messageId)
+      if (!message) {
+        return response.status(404).json({ error: 'Message not found' })
+      }
+
+      if (message.user_id !== user.id) {
+        return response.status(403).json({ error: 'You can only edit your own messages' })
+      }
+
+      message.content = content
+      message.is_edited = true
+      message.edited_at = new Date()
+      await message.save()
+
+      await message.load('user')
+
+      return response.json({ success: true, message })
+    } catch (error) {
+      console.error('Edit message error:', error)
+      return response.status(500).json({ error: 'Failed to edit message' })
+    }
+  }
+
+  // ============================
+  // DELETE MESSAGE
+  // ============================
+  async delete({ params, auth, response }) {
+    try {
+      const user = await auth.getUser()
+      const messageId = params.id
+
+      const message = await Message.find(messageId)
+      if (!message) {
+        return response.status(404).json({ error: 'Message not found' })
+      }
+
+      if (message.user_id !== user.id) {
+        return response.status(403).json({ error: 'You can only delete your own messages' })
+      }
+
+      message.is_deleted = true
+      message.deleted_at = new Date()
+      message.content = '[Message deleted]'
+      await message.save()
+
+      return response.json({ success: true, message })
+    } catch (error) {
+      console.error('Delete message error:', error)
+      return response.status(500).json({ error: 'Failed to delete message' })
+    }
+  }
+
+  // ============================
+  // SEARCH MESSAGES
+  // ============================
+  async search({ params, request, response }) {
+    try {
+      const channelId = params.channelId
+      const query = request.input('q', '')
+      const page = request.input('page', 1)
+
+      if (!query || query.trim() === '') {
+        return response.status(400).json({ error: 'Search query is required' })
+      }
+
+      const messages = await Message
+        .query()
+        .where('channel_id', channelId)
+        .where('is_deleted', false)
+        .where('content', 'LIKE', `%${query}%`)
+        .with('user')
+        .orderBy('created_at', 'desc')
+        .paginate(page, 25)
+
+      return response.json({ messages })
+    } catch (error) {
+      console.error('Search messages error:', error)
+      return response.status(500).json({ error: 'Failed to search messages' })
+    }
+  }
+
 }
 
 module.exports = MessageController
