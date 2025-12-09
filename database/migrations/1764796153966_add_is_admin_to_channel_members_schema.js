@@ -3,10 +3,14 @@
 const Schema = use('Schema')
 
 class AddIsAdminToChannelMembersSchema extends Schema {
-  up () {
-    this.table('channel_members', (table) => {
-      table.boolean('is_admin').defaultTo(false)
-    })
+  async up () {
+    const hasColumn = await this.db.schema.hasColumn('channel_members', 'is_admin')
+    
+    if (!hasColumn) {
+      this.table('channel_members', (table) => {
+        table.boolean('is_admin').defaultTo(false)
+      })
+    }
   }
 
   down () {

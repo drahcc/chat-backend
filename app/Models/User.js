@@ -17,6 +17,10 @@ class User extends Model {
   static get hidden() {
     return ['password']
   }
+
+  static get fillable() {
+    return ['username', 'email', 'password', 'first_name', 'last_name', 'avatar_url', 'status']
+  }
 }
 
 module.exports = User

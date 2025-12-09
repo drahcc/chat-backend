@@ -4,6 +4,9 @@ const Message = use('App/Models/Message')
 const Channel = use('App/Models/Channel')
 const ChannelMember = use('App/Models/ChannelMember')
 const User = use('App/Models/User')
+const ChannelBan = use('App/Models/ChannelBan')
+const ChannelKick = use('App/Models/ChannelKick')
+const ChannelInvite = use('App/Models/ChannelInvite')
 
 class MessageController {
 
@@ -85,7 +88,32 @@ class MessageController {
       mentioned_user_id: mentionedUserId
     })
 
-    return { success: true, message }
+    // preload user for frontend display
+    await message.load('user')
+
+    return { success: true, message: message.toJSON() }
+  }
+
+  // ============================
+  // SEND COMMAND (No channel context)
+  // ============================
+  async sendCommand({ request, auth, response }) {
+    console.log('📥 sendCommand called with:', request.all())
+    
+    try {
+      const user = await auth.getUser()
+      const content = request.input('content')
+
+      if (!content || !content.startsWith('/')) {
+        return response.status(400).json({ error: 'Invalid command' })
+      }
+
+      const result = await this.handleCommand(content, user, null)
+      return response.json(result)
+    } catch (error) {
+      console.error('❌ sendCommand error:', error.message)
+      return response.status(500).json({ error: error.message })
+    }
   }
 
   // ============================
@@ -113,6 +141,12 @@ class MessageController {
 
       case '/kick':
         return await this.commandKick(parts, channelId, user)
+
+      case '/revoke':
+        return await this.commandRevoke(parts, channelId, user)
+
+      case '/unban':
+        return await this.commandUnban(parts, channelId, user)
 
       default:
         return { error: 'Unknown command' }
@@ -150,9 +184,31 @@ class MessageController {
       return { success: true, created: true, channel }
     }
 
-    // private → cannot join
+    // private → check for invitation
     if (channel.type === 'private') {
-      return { error: 'This channel is private. You need an invitation.' }
+      const invite = await ChannelInvite
+        .query()
+        .where('channel_id', channel.id)
+        .where('receiver_id', user.id)
+        .where('status', 'pending')
+        .first()
+
+      if (!invite) {
+        return { error: 'This channel is private. You need an invitation.' }
+      }
+
+      // Accept the invite
+      invite.status = 'accepted'
+      await invite.save()
+
+      // Add to members
+      await ChannelMember.create({
+        channel_id: channel.id,
+        user_id: user.id,
+        is_admin: false
+      })
+
+      return { success: true, joined: true, via_invite: true, channel }
     }
 
     const exists = await ChannelMember
@@ -323,11 +379,146 @@ class MessageController {
       return { error: 'User is not in this channel' }
     }
 
+    // Track the kick
+    await ChannelKick.create({
+      channel_id: channelId,
+      user_id: target.id,
+      kicked_by: user.id
+    })
+
+    // Count total kicks for this user in this channel
+    const kickCount = await ChannelKick
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', target.id)
+      .count('* as total')
+
+    const totalKicks = kickCount[0].total
+
+    // If 3 or more kicks, auto-ban
+    if (totalKicks >= 3) {
+      await ChannelBan.create({
+        channel_id: channelId,
+        user_id: target.id,
+        reason: 'Automatic ban after 3 kicks'
+      })
+    }
+
+    // Remove from channel
     await member.delete()
 
     return {
       success: true,
       kicked: true,
+      user: username,
+      kick_count: totalKicks,
+      banned: totalKicks >= 3
+    }
+  }
+
+  // ============================
+  // /revoke username - remove from private channel invites
+  // ============================
+  async commandRevoke(parts, channelId, user) {
+    if (parts.length < 2) {
+      return { error: 'Usage: /revoke username' }
+    }
+
+    const username = parts[1]
+    const channel = await Channel.find(channelId)
+
+    if (!channel) {
+      return { error: 'Channel not found' }
+    }
+
+    // Only admin can revoke
+    const admin = await ChannelMember
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', user.id)
+      .first()
+
+    if (!admin || !admin.is_admin) {
+      return { error: 'Only admins can revoke invites' }
+    }
+
+    const target = await User.findBy('username', username)
+    if (!target) {
+      return { error: 'User not found' }
+    }
+
+    // Remove from channel if member
+    const member = await ChannelMember
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', target.id)
+      .first()
+
+    if (member) {
+      await member.delete()
+    }
+
+    return {
+      success: true,
+      revoked: true,
+      user: username
+    }
+  }
+
+  // ============================
+  // /unban username - admin unban user
+  // ============================
+  async commandUnban(parts, channelId, user) {
+    if (parts.length < 2) {
+      return { error: 'Usage: /unban username' }
+    }
+
+    const username = parts[1]
+    const channel = await Channel.find(channelId)
+
+    if (!channel) {
+      return { error: 'Channel not found' }
+    }
+
+    // Only admin can unban
+    const admin = await ChannelMember
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', user.id)
+      .first()
+
+    if (!admin || !admin.is_admin) {
+      return { error: 'Only admins can unban users' }
+    }
+
+    const target = await User.findBy('username', username)
+    if (!target) {
+      return { error: 'User not found' }
+    }
+
+    // Remove ban
+    const ban = await ChannelBan
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', target.id)
+      .first()
+
+    if (!ban) {
+      return { error: 'User is not banned' }
+    }
+
+    await ban.delete()
+
+    // Also clear kick history
+    await ChannelKick
+      .query()
+      .where('channel_id', channelId)
+      .where('user_id', target.id)
+      .delete()
+
+    return {
+      success: true,
+      unbanned: true,
       user: username
     }
   }

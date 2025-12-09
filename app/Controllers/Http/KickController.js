@@ -18,7 +18,7 @@ class KickController {
     }
 
     // Проверка дали текущият потребител е owner/mod
-    if (channel.owner_id !== user.id) {
+    if (channel.admin_id !== user.id) {
       return response.status(403).send({ error: 'Not allowed' })
     }
 

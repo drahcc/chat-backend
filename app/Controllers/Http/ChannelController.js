@@ -34,7 +34,8 @@ class ChannelController {
       name,
       description: description || '',
       type: type || 'public',
-      owner_id: user.id,
+      admin_id: user.id,
+      last_message_at: new Date()
     })
 
     await ChannelMember.create({
@@ -64,7 +65,7 @@ class ChannelController {
     const user = await auth.getUser()
     const channel = await Channel.findOrFail(params.id)
 
-    if (channel.owner_id !== user.id) {
+    if (channel.admin_id !== user.id) {
       return { error: 'Only channel owner can ban users' }
     }
 
@@ -92,7 +93,7 @@ class ChannelController {
     const user = await auth.getUser()
     const channel = await Channel.findOrFail(params.id)
 
-    if (channel.owner_id !== user.id) {
+    if (channel.admin_id !== user.id) {
       return { error: 'Only channel owner can unban users' }
     }
 
@@ -120,7 +121,7 @@ class ChannelController {
     const user = await auth.getUser()
     const channel = await Channel.findOrFail(params.id)
 
-    if (channel.owner_id !== user.id) {
+    if (channel.admin_id !== user.id) {
       return { error: 'Only owner can see ban list' }
     }
 
@@ -129,6 +130,141 @@ class ChannelController {
       .where('channel_id', channel.id)
       .with('user')
       .fetch()
+  }
+
+  /**
+   * POST /channels/:id/join
+   */
+  async join({ params, auth, response }) {
+    try {
+      const user = await auth.getUser()
+      const channel = await Channel.findOrFail(params.id)
+
+      // Private channels require invite (not implemented fully here)
+      if (channel.type === 'private') {
+        return response.status(403).json({ error: 'Private channel. Invite required.' })
+      }
+
+      const existing = await ChannelMember
+        .query()
+        .where('channel_id', channel.id)
+        .where('user_id', user.id)
+        .first()
+
+      if (existing) {
+        return { success: true, already_member: true, channel_id: channel.id }
+      }
+
+      await ChannelMember.create({
+        channel_id: channel.id,
+        user_id: user.id,
+        is_admin: false
+      })
+
+      channel.last_message_at = new Date()
+      await channel.save()
+
+      return { success: true, joined: true, channel_id: channel.id }
+    } catch (err) {
+      console.error('Join channel error:', err.message)
+      return response.status(500).json({ error: err.message })
+    }
+  }
+
+  /**
+   * POST /channels/:id/leave
+   */
+  async leave({ params, auth }) {
+    const user = await auth.getUser()
+    const membership = await ChannelMember
+      .query()
+      .where('channel_id', params.id)
+      .where('user_id', user.id)
+      .first()
+
+    if (!membership) {
+      return { error: 'Not a member' }
+    }
+
+    // If admin leaves, delete the channel
+    if (membership.is_admin) {
+      const channel = await Channel.find(params.id)
+      if (channel) await channel.delete()
+      return { success: true, deleted_channel: true }
+    }
+
+    await membership.delete()
+    return { success: true, left: true }
+  }
+
+  /**
+   * GET /channels/:id/members
+   */
+  async list({ params }) {
+    return ChannelMember
+      .query()
+      .where('channel_id', params.id)
+      .with('user')
+      .fetch()
+  }
+
+  /**
+   * POST /channels/:id/invite
+   */
+  async invite({ params, request, auth, response }) {
+    const user = await auth.getUser()
+    const channel = await Channel.findOrFail(params.id)
+
+    // Only admin can invite
+    const membership = await ChannelMember
+      .query()
+      .where('channel_id', channel.id)
+      .where('user_id', user.id)
+      .first()
+
+    if (!membership || !membership.is_admin) {
+      return response.status(403).json({ error: 'Only admins can invite' })
+    }
+
+    const { user_id } = request.post()
+    if (!user_id) {
+      return response.status(400).json({ error: 'user_id required' })
+    }
+
+    const existing = await ChannelMember
+      .query()
+      .where('channel_id', channel.id)
+      .where('user_id', user_id)
+      .first()
+
+    if (existing) {
+      return { success: true, already_member: true }
+    }
+
+    await ChannelMember.create({
+      channel_id: channel.id,
+      user_id,
+      is_admin: false
+    })
+
+    return { success: true, invited: true }
+  }
+
+
+  /**
+   * POST /channels/cleanup
+   * Deletes channels inactive for >30 days
+   */
+  async cleanup() {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 30)
+
+    const deleted = await Channel
+      .query()
+      .where('last_message_at', '<', cutoff)
+      .delete()
+
+    return { success: true, deleted }
   }
 }
 
