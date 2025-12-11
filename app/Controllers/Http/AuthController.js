@@ -53,6 +53,45 @@ class AuthController {
       })
     }
   }
+
+  // Update notification preference
+  async updateNotificationPreference({ request, auth, response }) {
+    try {
+      const user = await auth.getUser()
+      const { preference } = request.only(['preference'])
+
+      if (!['all', 'mentions_only'].includes(preference)) {
+        return response.status(400).json({
+          message: 'Invalid preference. Must be "all" or "mentions_only"'
+        })
+      }
+
+      user.notification_preference = preference
+      await user.save()
+
+      return response.json({
+        message: 'Notification preference updated',
+        user
+      })
+    } catch (error) {
+      console.error('UPDATE PREFERENCE ERROR:', error)
+      return response.status(500).json({
+        message: 'Failed to update preference'
+      })
+    }
+  }
+
+  // Get current user
+  async me({ auth, response }) {
+    try {
+      const user = await auth.getUser()
+      return response.json({ user })
+    } catch (error) {
+      return response.status(401).json({
+        message: 'Not authenticated'
+      })
+    }
+  }
 }
 
 module.exports = AuthController

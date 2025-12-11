@@ -43,55 +43,62 @@ class MessageController {
   // ============================
   // SEND MESSAGE
   // ============================
-  async send({ params, request, auth }) {
-    const user = await auth.getUser()
-    const channelId = params.channelId
-    const content = request.input('content')
+  async send({ params, request, auth, response }) {
+    try {
+      const user = await auth.getUser()
+      const channelId = params.channelId
+      const content = request.input('content')
 
-    if (!content || content.trim() === '') {
-      return { error: 'Message cannot be empty' }
-    }
-
-    // If command → process it
-    if (content.startsWith('/')) {
-      return await this.handleCommand(content, user, channelId)
-    }
-
-    // Must be member for normal message
-    const isMember = await ChannelMember
-      .query()
-      .where('channel_id', channelId)
-      .where('user_id', user.id)
-      .first()
-
-    if (!isMember) {
-      return { error: 'You are not a member of this channel' }
-    }
-
-    // detect @mention
-    let mentionedUserId = null
-    const match = content.match(/@([A-Za-z0-9_]+)/)
-
-    if (match) {
-      const username = match[1]
-      const mentionedUser = await User.findBy('username', username)
-      if (mentionedUser) {
-        mentionedUserId = mentionedUser.id
+      if (!content || content.trim() === '') {
+        return { error: 'Message cannot be empty' }
       }
+
+      // If command → process it
+      if (content.startsWith('/')) {
+        return await this.handleCommand(content, user, channelId)
+      }
+
+      // Must be member for normal message
+      const isMember = await ChannelMember
+        .query()
+        .where('channel_id', channelId)
+        .where('user_id', user.id)
+        .first()
+
+      if (!isMember) {
+        return { error: 'You are not a member of this channel' }
+      }
+
+      // detect @mention
+      let mentionedUserId = null
+      const match = content.match(/@([A-Za-z0-9_]+)/)
+
+      if (match) {
+        const username = match[1]
+        const mentionedUser = await User.findBy('username', username)
+        if (mentionedUser) {
+          mentionedUserId = mentionedUser.id
+        }
+      }
+
+      const message = await Message.create({
+        channel_id: channelId,
+        user_id: user.id,
+        content,
+        is_command: false,
+        mentioned_user_id: mentionedUserId
+      })
+
+      // preload user for frontend display
+      await message.load('user')
+
+      return { success: true, message: message.toJSON() }
+    } catch (error) {
+      console.error('❌ Error in send():', error)
+      return response.status(500).json({ 
+        error: error.message || 'Internal server error' 
+      })
     }
-
-    const message = await Message.create({
-      channel_id: channelId,
-      user_id: user.id,
-      content,
-      is_command: false,
-      mentioned_user_id: mentionedUserId
-    })
-
-    // preload user for frontend display
-    await message.load('user')
-
-    return { success: true, message: message.toJSON() }
   }
 
   // ============================
@@ -124,6 +131,9 @@ class MessageController {
     const command = parts[0]
 
     switch (command) {
+      case '/help':
+        return await this.commandHelp()
+
       case '/join':
         return await this.commandJoin(parts, user)
 
@@ -149,7 +159,38 @@ class MessageController {
         return await this.commandUnban(parts, channelId, user)
 
       default:
-        return { error: 'Unknown command' }
+        return { error: 'Unknown command. Type /help to see available commands.' }
+    }
+  }
+
+  // ============================
+  // /help - Show all commands
+  // ============================
+  async commandHelp() {
+    const helpText = `**Available Commands:**
+
+📝 **Channel Management**
+• \`/join channelName [private]\` - Join existing channel or create new one
+• \`/cancel\` or \`/quit\` - Leave current channel
+• \`/list\` - Show all members in current channel
+
+👥 **User Management**
+• \`/invite @username\` - Invite user to current channel
+• \`/kick @username [reason]\` - Remove user from channel (admin only)
+• \`/revoke @username\` - Cancel pending invitation (admin only)
+• \`/unban @username\` - Unban user from channel (admin only)
+
+ℹ️ **Other**
+• \`/help\` - Show this help message
+
+**Example:**
+\`/join general\` - Join or create channel "general"
+\`/invite @john\` - Invite user "john" to current channel`
+
+    return { 
+      success: true, 
+      is_help: true,
+      content: helpText 
     }
   }
 
@@ -330,7 +371,8 @@ class MessageController {
 
     await ChannelMember.create({
       channel_id: channelId,
-      user_id: target.id
+      user_id: target.id,
+      invited_at: new Date()  // Set invited_at when inviting
     })
 
     return {
@@ -348,7 +390,7 @@ class MessageController {
       return { error: 'Usage: /kick username' }
     }
 
-    const username = parts[1]
+    const username = parts[1].replace('@', '') // Remove @ if present
 
     const target = await User.findBy('username', username)
     if (!target) {
@@ -407,10 +449,15 @@ class MessageController {
     // Remove from channel
     await member.delete()
 
+    // NOTE: Socket.IO notification will be sent from frontend after successful kick
+
     return {
       success: true,
       kicked: true,
+      message: `Successfully kicked ${username}. Total kicks: ${totalKicks}${totalKicks >= 3 ? ' (User is now banned)' : ''}`,
       user: username,
+      userId: target.id,
+      channelId: channelId,
       kick_count: totalKicks,
       banned: totalKicks >= 3
     }

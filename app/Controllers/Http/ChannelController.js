@@ -10,11 +10,26 @@ class ChannelController {
    * GET /channels
    * List all channels with members
    */
-  async index() {
-    return Channel
+  async index({ auth }) {
+    const user = await auth.getUser()
+    const channels = await Channel
       .query()
       .with('members.user')
       .fetch()
+
+    // Manually add invited_at for current user to each channel
+    const result = await Promise.all(channels.toJSON().map(async (chan) => {
+      const membership = await ChannelMember.query()
+        .where('channel_id', chan.id)
+        .where('user_id', user.id)
+        .first()
+      if (membership) {
+        chan.invited_at = membership.invited_at
+      }
+      return chan
+    }))
+
+    return result
   }
 
   /**
@@ -178,7 +193,8 @@ class ChannelController {
       await ChannelMember.create({
         channel_id: channel.id,
         user_id: user.id,
-        is_admin: false
+        is_admin: false,
+        invited_at: new Date()  // Set invited_at for newly joined public channels
       })
 
       channel.last_message_at = new Date()
@@ -317,6 +333,34 @@ class ChannelController {
       success: true, 
       deletedChannels: deletedCount,
       leftChannels: leftCount
+    }
+  }
+
+  /**
+   * POST /channels/:id/clear-invite-flag
+   * Clear the invited_at timestamp when user opens/views the channel
+   * (removes the highlight from the channel list)
+   */
+  async clearInviteFlag({ params, auth }) {
+    try {
+      const user = await auth.getUser()
+      const channel = await Channel.findOrFail(params.id)
+
+      const membership = await ChannelMember
+        .query()
+        .where('channel_id', channel.id)
+        .where('user_id', user.id)
+        .first()
+
+      if (membership) {
+        membership.invited_at = null
+        await membership.save()
+      }
+
+      return { success: true, message: 'Invite flag cleared' }
+    } catch (error) {
+      console.error('clearInviteFlag error:', error)
+      return { success: false, error: error.message }
     }
   }
 }

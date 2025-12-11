@@ -291,6 +291,24 @@ io.on("connection", (socket) => {
 
   /*
   |--------------------------------------------------------------------------
+  |   USER KICKED FROM CHANNEL
+  |--------------------------------------------------------------------------
+  */
+  socket.on("user:kick", (data) => {
+    const { channelId, userId, kickedBy } = data;
+    console.log(`👢 User ${userId} kicked from channel ${channelId} by ${kickedBy}`);
+    
+    // Broadcast to all users in the channel
+    io.emit(`channel:${channelId}:kick`, {
+      userId,
+      channelId,
+      kickedBy,
+      timestamp: new Date()
+    });
+  });
+
+  /*
+  |--------------------------------------------------------------------------
   |   DISCONNECT
   |--------------------------------------------------------------------------
   */

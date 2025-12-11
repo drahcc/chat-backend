@@ -20,6 +20,7 @@ Route.group(() => {
   Route.post('/channels/:id/join', 'ChannelController.join')
   Route.post('/channels/:id/leave', 'ChannelController.leave')
   Route.post('/channels/:id/invite', 'ChannelController.invite')
+  Route.post('/channels/:id/clear-invite-flag', 'ChannelController.clearInviteFlag')
   Route.get('/channels/:id/members', 'ChannelController.list')
   Route.post('/channels/cleanup', 'ChannelController.cleanup')
 
