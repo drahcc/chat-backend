@@ -61,19 +61,19 @@ powershell
 cd "c:\Users\PC NITRO INTEL\Desktop\Нова папка\chat-backend"
 npm install 
 
-Database Migrations
+## Database Migrations
 If using Adonis migrations:
 node ace migration:run
-Start Servers
+## Start Servers
 Start HTTP API:
 cd "c:\Users\PC NITRO INTEL\Desktop\Нова папка\chat-backend"
 node server.js
-Start Socket.IO:
+## Start Socket.IO:
 cd "c:\Users\PC NITRO INTEL\Desktop\Нова папка\chat-backend"
 node socket-server.js
 API runs at http://127.0.0.1:3333
 Socket server runs at ws://127.0.0.1:3334
-Key Endpoints (Examples)
+## Key Endpoints (Examples)
 Auth:
 POST /register — create user
 POST /login — get token
@@ -90,22 +90,22 @@ Messages:
 GET /channels/:id/messages?page=1&limit=50
 POST /channels/:id/messages { content }
 POST /messages/command — supports /help, /join, /invite, /kick, /ban, /unban, /list, /cancel, /quit
-Socket Events (Client)
+## Socket Events (Client)
 message:new — broadcast new messages
 typing — typing indicator with preview
 status:update — presence changes
 user:kick — kick notification for auto-redirect
-Invite Highlighting
+## Invite Highlighting
 Backend sets invited_at on invite/join for a specific user
 Frontend pins and highlights based on invited_at
 When user opens the channel, frontend calls POST /channels/:id/clear-invite to reset
-Notifications
+## Notifications
 Preference stored per user (users.notification_preference)
 Frontend respects app visibility and dnd status to show notifications
 No Notification actions are used unless a Service Worker is present
-Troubleshooting
+## Troubleshooting
 Node exits with code 1: check .env and config/database.js connectivity to PostgreSQL
 Ports busy: ensure 3333 (API) and 3334 (Socket) are free
 DB migrations: confirm tables/columns exist (users, channels, channel_members, messages, bans, tokens)
-License
+
 
